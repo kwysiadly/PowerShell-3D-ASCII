@@ -129,6 +129,7 @@ function Get-yRotation ( [int] $x, [int] $y, [int] $z, [float] $angle ) {
 function Get-zRotation ( [int] $x, [int] $y, [int] $z, [float] $angle ) {
     [int] $x_ = [Math]::cos($angle) * $x - [Math]::sin($angle) * $y
     [int] $y_ = [Math]::sin($angle) * $x + [Math]::cos($angle) * $z
+    #[int] $y_ = -[Math]::sin($angle) * $x + [Math]::cos($angle) * $z
     [int] $z_ = $z
     return @($x_, $y_, $z_)
 }
@@ -138,7 +139,31 @@ function Get-Coordinates ( [int] $x, [int] $y, [int] $z, [int] $zoom, [int] $dis
     $z += $global:vz
     [int] $x_ = $global:xCenter + $zoom * ( -( $x / $y ) * $distance )
     [int] $y_ = $global:yCenter - $zoom * ( -( $z / $y ) * $distance )
-    return @( $x_, $y_ )
+    return @( $x_, $y_, $x, $y, $z )
+}
+
+function New-LineCount ( $obj ) {
+    [int] $count = 0
+    for ( [int] $i = 0; $i -lt $obj.Count; $i++ ) {
+        $count += $obj[$i].Count
+    }
+    return  @( [int] 0, [int] $count, [int] 0 )
+}
+
+function Add-Table ( $obj, [string] $name, [string] $newName, [int] $width = 0 ) {
+    [int] $w = 0
+    if ( $width -gt 0 ) {
+        $w = $width
+    }
+    [int] $h = $obj[$name].Count
+
+    $obj[$newName] = [Object[]]::new($h)
+    for ( $i = 0; $i -lt $h; $i++ ) {
+        if ( $width -eq 0 ) {
+            $w = $obj[$name][$i].Count
+        }
+        $obj[$newName][$i] += [int[]]::new($w)
+    }
 }
 
 Clear-Host
@@ -147,177 +172,130 @@ Set-Display $global:width $($global:height + 1)
 
 Set-Buffer
 
-[int] $global:vx        = 0
-[int] $global:vy        = -500
-[int] $global:vz        = 0
-[int] $width            = 50
-[char] $global:pixel    = '0'
-[float] $alfa           = 0
-[float] $beta           = 0
-[float] $gamma          = 0
-[float] $pi             = [Math]::pi
-
+[int] $width = 50
 $figures = @{
     "cube" = @{
-        "zoom" = 15;
-        "distance" = 6;
-        "points" = @(
-            @( $width, $width, $width ), @( -$width, $width, $width ), @( -$width, -$width, $width ), @( $width, -$width, $width ),
-            @( $width, $width, -$width ), @( -$width, $width, -$width ), @( -$width, -$width, -$width ), @( $width, -$width, -$width )
+        "zoom"      = 15;
+        "distance"  = 10;
+        "points"    = @(
+            @( -$width, $width, $width ),   @( $width, $width, $width ),    @( $width, -$width, $width ),   @( -$width, -$width, $width ),
+            @( -$width, $width, -$width ),  @( $width, $width, -$width ),   @( $width, -$width, -$width ),  @( -$width, -$width, -$width )
         );
-        "coords" = @(
-            @(0, 0), @(0, 0), @(0, 0), @(0, 0),
-            @(0, 0), @(0, 0), @(0, 0), @(0, 0)
-        );
-        "lines" = @(
-            @( 0, 1 ), @( 1, 2 ), @( 2, 3 ), @( 3, 0 ),
-            @( 4, 5 ), @( 5, 6 ), @( 6, 7 ), @( 7, 4 ),
-            @( 0, 4 ), @( 1, 5 ), @( 2, 6 ), @( 3, 7 )
+        "shapes" = @(
+            @( 0, 1, 2, 3, 0 ), @( 1, 0, 4, 5, 1 ), @( 5, 4, 7, 6, 5 ), @( 6, 7, 3, 2, 6 ), @( 4, 0, 3, 7, 4 ), @( 1, 5, 6, 2, 1 )
         )
     };
     "triangle" = @{
-        "zoom" = 15;
-        "distance" = 6;
-        "points" = @(
-            @( $width, $width, $width ), @( -$width, $width, $width ), @( 0, -$width, $width ),
-            @( 0, 0, -$width )
+        "zoom"      = 15;
+        "distance"  = 12;
+        "points"    = @(
+            @( -$width, $width, $width ), @( $width, $width, $width ), @( 0, $width, -$width ), @( 0, -$width, 0 )
         );
-        "coords" = @(
-            @(0, 0), @(0, 0), @(0, 0), @(0, 0)
-        );
-        "lines" = @(
-            @( 0, 1 ), @( 1, 2 ), @( 2, 0 ),
-            @( 0, 3 ), @( 1, 3 ), @( 2, 3 )
+        "shapes" = @(
+            @( 1, 0, 2, 1 ), @( 0, 1, 3, 0 ), @( 2, 0, 3, 2 ), @( 1, 2, 3, 1 )
         )
     };
     "pyramid" = @{
-        "zoom" = 15;
-        "distance" = 6;
-        "points" = @(
-            @( $width, $width, $width ), @( -$width, $width, $width ), @( -$width, -$width, $width ), @( $width, -$width, $width ),
-            @( 0, 0, -$width )
+        "zoom"      = 15;
+        "distance"  = 10;
+        "points"    = @(
+            @( -$width, $width, $width ), @( $width, $width, $width ), @( $width, -$width, $width ), @( -$width, -$width, $width ), @( 0, 0, -$width )
         );
-        "coords" = @(
-            @(0, 0), @(0, 0), @(0, 0), @(0, 0),
-            @(0, 0)
-        );
-        "lines" = @(
-            @( 0, 1 ), @( 1, 2 ), @( 2, 3 ), @( 3, 0 ),
-            @( 0, 4 ), @( 1, 4 ), @( 2, 4 ), @( 3, 4 )
+        "shapes" = @(
+            @( 0, 1, 2, 3, 0 ), @( 1, 0, 4, 1 ), @( 2, 1, 4, 2 ), @( 3, 2, 4, 3 ), @( 0, 3, 4, 0 )
         )
     };
     "star" = @{
-        "zoom" = 15;
-        "distance" = 6;
-        "points" = @(
-            @( $width, $width, $width ), @( -$width, $width, $width ), @( -$width, -$width, $width ), @( $width, -$width, $width ),
-            @( $width, $width, -$width ), @( -$width, $width, -$width ), @( -$width, -$width, -$width ), @( $width, -$width, -$width ),
-            @( 0, 0, $($width+$width*2) ), @( 0, $($width+$width*2), 0 ), @( 0, 0, -$($width+$width*2) ), @( 0, -$($width+$width*2), 0 ),
-            @( -$($width+$width*2), 0, 0 ), @( $($width+$width*2), 0, 0 )
+        "zoom"      = 25;
+        "distance"  = 6;
+        "points"    = @(
+            @( -$width, $width, $width ),   @( $width, $width, $width ),    @( $width, -$width, $width ),   @( -$width, -$width, $width ),
+            @( -$width, $width, -$width ),  @( $width, $width, -$width ),   @( $width, -$width, -$width ),  @( -$width, -$width, -$width )
+            @( 0, 0, $($width*1.5) ),       @( 0, $($width*1.5), 0 ),       @( 0, 0, -$($width*1.5) ),      @( 0, -$($width*1.5), 0 ),
+            @( -$($width*1.5), 0, 0 ),      @( $($width*1.5), 0, 0 )
         );
-        "coords" = @(
-            @( 0, 0 ), @( 0, 0 ), @( 0, 0 ), @( 0, 0 ),
-            @( 0, 0 ), @( 0, 0 ), @( 0, 0 ), @( 0, 0 ),
-            @( 0, 0 ), @( 0, 0 ), @( 0, 0 ), @( 0, 0 ),
-            @( 0, 0 ), @( 0, 0 )
-        );
-        "lines" = @(
-            @( 0, 1 ), @( 1, 2 ), @( 2, 3 ), @( 3, 0 ),
-            @( 4, 5 ), @( 5, 6 ), @( 6, 7 ), @( 7, 4 ),
-            @( 0, 4 ), @( 1, 5 ), @( 2, 6 ), @( 3, 7 ),
-            @( 0, 8 ), @( 1, 8 ), @( 2, 8 ), @( 3, 8 ),
-            @( 0, 9 ), @( 1, 9 ), @( 4, 9 ), @( 5, 9 ),
-            @( 4, 10 ), @( 5, 10 ), @( 6, 10 ), @( 7, 10 ),
-            @( 2, 11 ), @( 3, 11 ), @( 6, 11 ), @( 7, 11 ),
-            @( 1, 12 ), @( 2, 12 ), @( 5, 12 ), @( 6, 12 ),
-            @( 0, 13 ), @( 3, 13 ), @( 4, 13 ), @( 7, 13 )
+        "shapes" = @(
+            @( 0, 1, 8, 0 ),    @( 1, 2, 8, 1 ),    @( 2, 3, 8, 2 ),    @( 3, 0, 8, 3 ), 
+            @( 1, 0, 9, 1 ),    @( 0, 4, 9, 0 ),    @( 4, 5, 9, 4 ),    @( 5, 1, 9, 5 ),
+            @( 5, 4, 10, 5 ),   @( 4, 7, 10, 4 ),   @( 7, 6, 10, 7 ),   @( 6, 5, 10, 6 ),
+            @( 6, 7, 11, 6 ),   @( 7, 3, 11, 7 ),   @( 3, 2, 11, 3 ),   @( 2, 6, 11, 2 ),
+            @( 4, 0, 12, 4 ),   @( 0, 3, 12, 0 ),   @( 3, 7, 12, 3 ),   @( 7, 4, 12, 7 ),
+            @( 1, 5, 13, 1 ),   @( 5, 6, 13, 5 ),   @( 6, 2, 13, 6 ),   @( 2, 1, 13, 2 )
         )
     };
     "dodecahedron" = @{
-        "zoom" = 30;
-        "distance" = 6;
-        "points" = @(
-            @( 0, -($width/3), $width ),
-            @( ($width/2), -($width/2), ($width/2) ),
-            @( $width, 0, ($width/3) ),
-            @( ($width/2), ($width/2), ($width/2) ),
-            @(  0, ($width/3), $width ),
-            @( -($width/2), ($width/2), ($width/2) ),
-            @( -$width, 0, ($width/3) ),
-            @( -($width/2), -($width/2), ($width/2) ),
-            @( -($width/3), -$width, 0 ),
-            @( ($width/3), -$width, 0 ),
-            @( ($width/2), -($width/2), -($width/2) ),
-            @( $width, 0, -($width/3) ),
-            @( ($width/2), ($width/2), -($width/2) ),
-            @( ($width/3), $width, 0 ),
-            @( -($width/3), $width, 0 ),
-            @( -($width/2), ($width/2), -($width/2) ),
-            @( -$width, 0, -($width/3) ),
-            @( -($width/2), -($width/2), -($width/2) ),
-            @( 0, -($width/3), -$width ),
-            @( 0, ($width/3), -$width  )
+        "zoom"      = 25;
+        "distance"  = 10;
+        "points"    = @(
+            @( 0, -18, 47 ),    @( 29, -29, 29 ),   @( 47, 0, 18 ),     @( 29, 29, 29 ),    @(  0, 18, 47 ),
+            @( -29, 29, 29 ),   @( -47, 0, 18 ),    @( -29, -29, 29 ),  @( -18, -47, 0 ),   @( 18, -47, 0 ),
+            @( 29, -29, -29 ),  @( 47, 0, -18 ),    @( 29, 29, -29 ),   @( 18, 47, 0 ),     @( -18, 47, 0 ),
+            @( -29, 29, -29 ),  @( -47, 0, -18 ),   @( -29, -29, -29 ), @( 0, -29, -47 ),   @( 0, 18, -47 )
         );
-        "coords" = @(
-            @(0, 0), @(0, 0), @(0, 0), @(0, 0), @(0, 0),
-            @(0, 0), @(0, 0), @(0, 0), @(0, 0), @(0, 0),
-            @(0, 0), @(0, 0), @(0, 0), @(0, 0), @(0, 0),
-            @(0, 0), @(0, 0), @(0, 0), @(0, 0), @(0, 0)
-        );
-        "lines" = @(
-            #@( 0, 1 ), @( 1, 2 ), @( 2, 3 ), @( 3, 4 ), @( 4, 0 ),
-            #@( 0, 4 ), @( 4, 5 ), @( 5, 6 ), @( 6, 7 ), @( 7, 0 ),
-            #@( 0, 7 ), @( 7, 8 ), @( 8, 9 ), @( 9, 1 ), @( 1, 0 ),
-            #@( 1, 9 ), @( 9, 10 ), @( 10, 11 ), @( 11, 2 ), @( 2, 1 ),
-            #@( 2, 11 ), @( 11, 12 ), @( 12, 13 ), @( 13, 3 ), @( 3, 2 ),
-            #@( 3, 13 ), @( 13, 14 ), @( 14, 5 ), @( 5, 4 ), @( 4, 3 ),
-            #@( 5, 14 ), @( 14, 15 ), @( 15, 16 ), @( 16, 6 ), @( 6, 5 ),
-            #@( 6, 16 ), @( 16, 17 ), @( 17, 8 ), @( 8, 7 ), @( 7, 6 ),
-            #@( 8, 17 ), @( 17, 18 ), @( 18, 10 ), @( 10, 9 ), @( 9, 8 ),
-            #@( 10, 18 ), @( 18, 19 ), @( 19, 12 ), @( 12, 11 ), @( 11, 10 ),
-            #@( 12, 19 ), @( 19, 15 ), @( 15, 14 ), @( 14, 13 ), @( 13, 12 ),
-            #@( 15, 19 ), @( 19, 18 ), @( 18, 17 ), @( 17, 16 ), @( 16, 15 )
-            @( 0, 1 ), @( 1, 2 ), @( 2, 3 ), @( 3, 4 ), @( 4, 0 ),
-            @( 4, 5 ), @( 5, 6 ), @( 6, 7 ), @( 7, 0 ),
-            @( 7, 8 ), @( 8, 9 ), @( 9, 1 ),
-            @( 9, 10 ), @( 10, 11 ), @( 11, 2 ),
-            @( 11, 12 ), @( 12, 13 ), @( 13, 3 ),
-            @( 13, 14 ), @( 14, 5 ),
-            @( 14, 15 ), @( 15, 16 ), @( 16, 6 ),
-            @( 16, 17 ), @( 17, 8 ),
-            @( 17, 18 ), @( 18, 10 ),
-            @( 18, 19 ), @( 19, 12 ),
-            @( 19, 15 )
+        "shapes" = @(
+            @( 0, 1, 2, 3, 4, 0 ),          @( 0, 4, 5, 6, 7, 0 ),          @( 0, 7, 8, 9, 1, 0 ),
+            @( 1, 9, 10, 11, 2, 1 ),        @( 2, 11, 12, 13, 3, 2 ),       @( 3, 13, 14, 5, 4, 3 ),
+            @( 5, 14, 15, 16, 6, 5 ),       @( 6, 16, 17, 8, 7, 6 ),        @( 8, 17, 18, 10, 9, 8 ),
+            @( 10, 18, 19, 12, 11, 10 ),    @( 12, 19, 15, 14, 13, 12 ),    @( 15, 19, 18, 17, 16, 15 )
         )
     }
 }
 $object = $figures.cube
+#$object = $figures.triangle
+#$object = $figures.pyramid
+#$object = $figures.star
+#$object = $figures.dodecahedron
+
+[int] $global:vx            = 0
+[int] $global:vy            = 500
+[int] $global:vz            = 0
+[int] $sk                   = $null
+[char] $global:pixel        = '0'
+[char] $char                = $null
+[float] $alfa               = 0
+[float] $beta               = 0
+[float] $gamma              = 0
+[float] $pi                 = [Math]::pi
+[bool] $hiddenLines         = $true
+[string] $drawnLinesIndex   = ""
+[int[]] $lineCount          = New-LineCount $object.shapes
+Add-Table $object "points" "points_"
+Add-Table $object "points" "coords" 2
+
 While ( $true ) {
-    [char] $char = Get-Char
-    if ( $char -eq 'q' ) {
+    $char = Get-Char
+    if ( $char -eq '1' ) {
+        $object = $figures.cube
+    } elseif ( $char -eq '2' ) {
+        $object = $figures.triangle
+    } elseif ( $char -eq '3' ) {
+        $object = $figures.pyramid
+    } elseif ( $char -eq '4' ) {
+        $object = $figures.star
+    } elseif ( $char -eq '5' ) {
+        $object = $figures.dodecahedron
+    } elseif ( $char -eq '0' ) { 
+        ([int]$global:pixel)++
+        Start-Sleep -Milliseconds 100
+    } elseif ( $char -eq 'h' ) {
+        $lineCount = New-LineCount $object.shapes
+        Start-Sleep -Milliseconds 100
+        $hiddenLines = $hiddenLines -xor 0x01
+    } elseif ( $char -eq 'q' ) {
         break
     }
-    switch ( $char ) {
-        '1' { $object = $figures.cube }
-        '2' { $object = $figures.triangle }
-        '3' { $object = $figures.pyramid }
-        '4' { $object = $figures.star }
-        '5' { $object = $figures.dodecahedron }
-        '0' { 
-            [int] $temp = $global:pixel
-            $temp++
-            $global:pixel = $temp
-        }
+    if ( $char -match "[1-5]" ) {
+        $lineCount = New-LineCount $object.shapes
+        Add-Table $object "points" "points_"
+        Add-Table $object "points" "coords" 2
     }
+    $Host.UI.RawUI.FlushInputBuffer()
 
     if ( $alfa -le $pi * 2 ) {
-        $alfa += $pi / 50
-        $beta = $alfa
-        $gamma = $alfa
+        $alfa   += $pi / 50
+        $beta    = $gamma = $alfa
     } else {
-        $alfa = 0
-        $beta = 0
-        $gamma = 0
+        $alfa = $beta = $gamma = 0
     }
     
     Clear-Buffer $true
@@ -325,18 +303,57 @@ While ( $true ) {
 
     for ( $i = 0; $i -lt $object.points.Count; $i++ ) {
         $p_ = Get-xRotation $object.points[$i][0] $object.points[$i][1] $object.points[$i][2] $alfa
-        $p_ = Get-yRotation $p_[0] $p_[1] $p_[2] $beta
-        $p_ = Get-zRotation $p_[0] $p_[1] $p_[2] $gamma
-        $p_ = Get-Coordinates $p_[0] $p_[1] $p_[2] $object.zoom $object.distance
+        #$p_ = Get-yRotation $p_[0] $p_[1] $p_[2] $beta
+        $object.points_[$i] = Get-yRotation $p_[0] $p_[1] $p_[2] $beta
+        #$object.points_[$i] = Get-zRotation $p_[0] $p_[1] $p_[2] $gamma
+        $p_ = Get-Coordinates $object.points_[$i][0] $object.points_[$i][1] $object.points_[$i][2] $object.zoom $object.distance
         $object.coords[$i][0] = $p_[0]
         $object.coords[$i][1] = $p_[1]
     }
 
-    for ( $i = 0; $i -lt $object.lines.Count; $i++ ) {
-        $p1 = $object.lines[$i][0]
-        $p2 = $object.lines[$i][1]
-        Set-Line $object.coords[$p1][0] $object.coords[$p1][1] $object.coords[$p2][0] $object.coords[$p2][1]
+    $lineCount[0]   = 0
+    $drawnLines     = @{}
+    $sk             = $null
+    for ( [int] $i = 0; $i -lt $object.shapes.Count; $i++ ) {
+        if ( $hiddenLines -eq $true ) {
+            #$px0 = $object.coords[$object.shapes[$i][0]][0]
+            #$py0 = $object.coords[$object.shapes[$i][0]][1]
+            #$px1 = $object.coords[$object.shapes[$i][1]][0]
+            #$py1 = $object.coords[$object.shapes[$i][1]][1]
+            #$px2 = $object.coords[$object.shapes[$i][2]][0]
+            #$py2 = $object.coords[$object.shapes[$i][2]][1]
+            #$sk = ( $px1 - $px0 ) * ( $py2 - $py1 ) - ( $py1 - $py0 ) * ( $px2 - $px1 )
+            $sk = ( $object.coords[$object.shapes[$i][1]][0] - $object.coords[$object.shapes[$i][0]][0] ) * `
+                  ( $object.coords[$object.shapes[$i][2]][1] - $object.coords[$object.shapes[$i][1]][1] ) - `
+                  ( $object.coords[$object.shapes[$i][1]][1] - $object.coords[$object.shapes[$i][0]][1] ) * `
+                  ( $object.coords[$object.shapes[$i][2]][0] - $object.coords[$object.shapes[$i][1]][0] )
+        }
+        if ( $sk -ge 0 ) {
+            #$global:pixel = $(0x30 + $i)
+            for ( $j = 0; $j -lt $object.shapes[$i].Count - 1; $j++ ) {
+                $p1 = $object.shapes[$i][$j]
+                $p2 = $object.shapes[$i][$j+1]
+                if ( $p1 -gt $p2 ) {
+                    $drawnLinesIndex = "$p2$p1"
+                } else {
+                    $drawnLinesIndex = "$p1$p2"
+                    }
+                if ( $null -eq $drawnLines[$drawnLinesIndex] ) {
+                    Set-Line $object.coords[$p1][0] $object.coords[$p1][1] $object.coords[$p2][0] $object.coords[$p2][1]
+                    $lineCount[0]++
+                    $drawnLines[$drawnLinesIndex] = $false
+                }
+            }
+        }
     }
 
     Get-Buffer
+    Set-Cursor 0 0
+    if ( $lineCount[0] -gt $lineCount[2] ) {
+        $lineCount[2] = $lineCount[0]
+    } elseif ( $lineCount[0] -lt $lineCount[1] ) {
+        $lineCount[1] = $lineCount[0]
+    }
+    Write-Host "Line #:" $lineCount[0] "| Min:" $lineCount[1] "| Max:" $lineCount[2]
+    #Read-Host
 }
